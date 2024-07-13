@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ghost in the Shell: Cyber Infiltration</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #000;
+            color: #0f0;
+        }
+        #game-container, #splash-screen {
+            text-align: center;
+            max-width: 600px;
+        }
+        #game-grid {
+            display: inline-grid;
+            grid-template-columns: repeat(5, 52px);
+            grid-gap: 2px;
+            margin-bottom: 20px;
+        }
+        .cell {
+            width: 50px;
+            height: 50px;
+            border: 1px solid #0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: black;
+        }
+        .cell img {
+            width: 32px;
+            height: 32px;
+        }
+        #message, #score, #level {
+            margin-bottom: 10px;
+        }
+        #next-level, #start-game {
+            display: none;
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #0f0;
+            color: #000;
+            border: none;
+            cursor: pointer;
+        }
+        #splash-screen {
+            display: block;
+        }
+        #game-container {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="splash-screen">
+        <h1>Ghost in the Shell: Cyber Infiltration</h1>
+        <p>You are an elite hacker in the world of Ghost in the Shell. Your mission: infiltrate a high-security AI research facility.</p>
+        <p>Navigate through multiple levels of cyber-defenses, avoiding firewalls and reaching the data extraction point on each level.</p>
+        <p>Your goal is to reach the core of the facility and extract crucial information about Project 2501.</p>
+        <p>Use arrow keys to move. Good luck, hacker.</p>
+        <button id="start-game">Begin Mission</button>
+    </div>
+    <div id="game-container">
+        <h1>Ghost in the Shell: Cyber Infiltration</h1>
+        <div id="level">Level: 1</div>
+        <div id="score">Score: 0</div>
+        <div id="game-grid"></div>
+        <div id="message">Use arrow keys to move. Reach the exit, avoid firewalls.</div>
+        <button id="next-level">Next Level</button>
+    </div>
+
+    <script>
+        let gridSize = 5;
+        let grid = [];
+        let playerPos = { x: 0, y: 0 };
+        let audioContext;
+        let currentLevel = 1;
+        let currentScore = 0;
+        let moves = 0;
+        let obstacles = 5;
+
+        const playerImage = 'player.png';
+        const barrierImage = 'barrier.png';
+        const exitImage = 'exit.png';
+
+        function initializeAudio() {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        function playSound(frequency, duration) {
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+            
+            gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + duration);
+        }
+
+        function initializeGrid() {
+            grid = [];
+            for (let i = 0; i < gridSize; i++) {
+                grid[i] = [];
+                for (let j = 0; j < gridSize; j++) {
+                    grid[i][j] = 'O';
+                }
+            }
+            playerPos = { x: 0, y: 0 };
+            grid[0][0] = 'P';
+            grid[gridSize-1][gridSize-1] = 'E';
+            
+            placeObstacles();
+        }
+
+        function placeObstacles() {
+            let attempts = 0;
+            while (attempts < 100) {
+                // Clear previous obstacles
+                for (let i = 0; i < gridSize; i++) {
+                    for (let j = 0; j < gridSize; j++) {
+                        if (grid[i][j] === 'X') {
+                            grid[i][j] = 'O';
+                        }
+                    }
+                }
+
+                // Place new obstacles
+                for (let i = 0; i < obstacles; i++) {
+                    let x, y;
+                    do {
+                        x = Math.floor(Math.random() * gridSize);
+                        y = Math.floor(Math.random() * gridSize);
+                    } while (grid[x][y] !== 'O');
+                    grid[x][y] = 'X';
+                }
+
+                // Check if there's a valid path
+                if (hasValidPath()) {
+                    return;
+                }
+                attempts++;
+            }
+            // If we can't find a valid configuration, reduce obstacles and try again
+            obstacles = Math.max(obstacles - 1, 1);
+            placeObstacles();
+        }
+
+        function hasValidPath() {
+            const visited = new Set();
+            const stack = [[0, 0]];
+
+            while (stack.length > 0) {
+                const [x, y] = stack.pop();
+                if (x === gridSize - 1 && y === gridSize - 1) {
+                    return true;
+                }
+
+                const key = `${x},${y}`;
+                if (visited.has(key)) continue;
+                visited.add(key);
+
+                const directions = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+                for (const [dx, dy] of directions) {
+                    const newX = x + dx;
+                    const newY = y + dy;
+                    if (newX >= 0 && newX < gridSize && newY >= 0 && newY < gridSize && grid[newX][newY] !== 'X') {
+                        stack.push([newX, newY]);
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        function renderGrid() {
+            const gameGrid = document.getElementById('game-grid');
+            gameGrid.innerHTML = '';
+            gameGrid.style.gridTemplateColumns = `repeat(${gridSize}, 52px)`;
+            for (let i = 0; i < gridSize; i++) {
+                for (let j = 0; j < gridSize; j++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    if (grid[i][j] !== 'O') {
+                        const img = document.createElement('img');
+                        if (grid[i][j] === 'P') {
+                            img.src = playerImage;
+                        } else if (grid[i][j] === 'E') {
+                            img.src = exitImage;
+                        } else if (grid[i][j] === 'X') {
+                            img.src = barrierImage;
+                        }
+                        cell.appendChild(img);
+                    }
+                    gameGrid.appendChild(cell);
+                }
+            }
+        }
+
+        function movePlayer(dx, dy) {
+            const newX = playerPos.x + dx;
+            const newY = playerPos.y + dy;
+            
+            if (newX >= 0 && newX < gridSize && newY >= 0 && newY < gridSize) {
+                if (grid[newX][newY] === 'X') {
+                    playSound(200, 0.1); // Low frequency for hitting obstacle
+                } else {
+                    grid[playerPos.x][playerPos.y] = 'O';
+                    playerPos.x = newX;
+                    playerPos.y = newY;
+                    grid[playerPos.x][playerPos.y] = 'P';
+                    moves++;
+                    renderGrid();
+                    playSound(440, 0.1); // Higher frequency for successful move
+
+                    if (newX === gridSize - 1 && newY === gridSize - 1) {
+                        const levelScore = Math.max(100 - moves, 10); // Minimum 10 points per level
+                        currentScore += levelScore;
+                        document.getElementById('message').textContent = `Level Complete! Score: ${levelScore}`;
+                        document.getElementById('score').textContent = `Total Score: ${currentScore}`;
+                        playSound(880, 0.3); // Victory sound
+                        document.removeEventListener('keydown', handleKeyPress);
+                        document.getElementById('next-level').style.display = 'inline-block';
+                    }
+                }
+            }
+        }
+
+        function handleKeyPress(event) {
+            switch(event.key) {
+                case 'ArrowUp': movePlayer(-1, 0); break;
+                case 'ArrowDown': movePlayer(1, 0); break;
+                case 'ArrowLeft': movePlayer(0, -1); break;
+                case 'ArrowRight': movePlayer(0, 1); break;
+            }
+        }
+
+        function nextLevel() {
+            currentLevel++;
+            gridSize = Math.min(5 + Math.floor(currentLevel / 2), 10); // Increase grid size every 2 levels, max 10x10
+            obstacles = Math.min(5 + currentLevel, 20); // Increase obstacles each level, max 20
+            moves = 0;
+            initializeGrid();
+            renderGrid();
+            document.getElementById('level').textContent = `Level: ${currentLevel}`;
+            document.getElementById('message').textContent = 'Use arrow keys to move. Reach the exit, avoid firewalls.';
+            document.getElementById('next-level').style.display = 'none';
+            document.addEventListener('keydown', handleKeyPress);
+        }
+
+        function startGame() {
+            document.getElementById('splash-screen').style.display = 'none';
+            document.getElementById('game-container').style.display = 'block';
+            initializeAudio();
+            initializeGrid();
+            renderGrid();
+            document.addEventListener('keydown', handleKeyPress);
+            document.getElementById('next-level').addEventListener('click', nextLevel);
+            
+            // Play theme music at reduced volume
+            const themeMusic = new Audio('theme.mp3');
+            themeMusic.loop = true;
+            themeMusic.volume = 0.3; // Reduce volume to 30%
+            themeMusic.play();
+        }
+
+        // Wait for the DOM to be fully loaded before attaching event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('start-game').addEventListener('click', startGame);
+            document.getElementById('start-game').style.display = 'inline-block';
+        });
+    </script>
+</body>
+</html>
